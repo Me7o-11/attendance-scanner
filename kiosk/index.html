@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#1F2E5E">
+  <title>Attendance Kiosk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root {
+      --blue: #1F2E5E;
+      --green: #41A848;
+      --sapphire: #2573B0;
+      --ink: #212130;
+      --ink-2: #4A5166;
+      --muted: #6C7487;
+      --silver: #F1F1F1;
+      --line: #DADDE5;
+      --amber: #B7791F;
+      --red: #C0392B;
+      --red-dark: #A93226;
+      --info-bg: #EAF2FA;
+      --error-bg: #FBEDEC;
+      --ok-bg: #EDF7EE;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: var(--silver);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-tap-highlight-color: transparent;
+    }
+    [hidden] { display: none !important; }
+
+    /* Header */
+    .top {
+      background: var(--blue); color: #fff;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 16px;
+    }
+    .clock { font-size: clamp(34px, 7vw, 64px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+    .date { margin-top: 4px; font-size: clamp(14px, 2.6vw, 20px); font-weight: 600; }
+    .tz-note { margin-top: 4px; font-size: 12px; color: rgba(255,255,255,0.72); }
+    .gear {
+      flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; border: 0;
+      background: rgba(255,255,255,0.12); color: #fff; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .gear svg { width: 24px; height: 24px; }
+    .stroke { height: 4px; background: linear-gradient(90deg, #41A848 0%, #2573B0 55%, #47BCE7 100%); }
+
+    main {
+      flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 16px;
+      display: grid; gap: 16px; grid-template-columns: 1fr;
+    }
+    @media (min-width: 900px) and (orientation: landscape) {
+      main { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
+    }
+    .card {
+      background: #fff; border-radius: var(--radius); padding: 16px;
+      box-shadow: 0 1px 3px rgba(33,33,48,0.08), 0 6px 18px rgba(33,33,48,0.06);
+    }
+    h2 { font-size: 17px; font-weight: 700; margin: 0 0 10px; }
+
+    /* Camera */
+    .cam-card { padding: 0; overflow: hidden; }
+    .cam-title { padding: 14px 16px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .cam-title h1 { font-size: clamp(20px, 3.4vw, 28px); margin: 0; font-weight: 800; }
+    .viewer { position: relative; background: #000; min-height: 300px; }
+    #reader { width: 100%; }
+    #reader video { width: 100% !important; display: block; object-fit: cover; }
+    .viewer.mirror #reader video { transform: scaleX(-1); }
+    .viewer .placeholder {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.85); text-align: center; padding: 24px; font-size: 18px;
+    }
+    .switch {
+      font: inherit; font-size: 15px; font-weight: 700; min-height: 44px; padding: 0 14px;
+      border-radius: 10px; border: 1.5px solid var(--line); background: #fff; color: var(--ink); cursor: pointer;
+    }
+    .diag {
+      margin: 12px 16px 16px; padding: 12px 14px; border-radius: 12px;
+      background: #FFF6E0; border-left: 5px solid var(--amber); font-size: 14px; line-height: 1.45;
+    }
+    .diag code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; word-break: break-word; }
+    .diag b { display: block; margin-bottom: 4px; }
+    .cam-hint { padding: 10px 16px 14px; color: var(--ink-2); font-size: 15px; }
+
+    /* Result overlay on the camera */
+    .result {
+      position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 5;
+      border-radius: 14px; padding: 16px 18px; font-size: 18px;
+      border-left: 8px solid var(--line); background: #fff;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .result.loading { display: flex; align-items: center; gap: 14px; color: var(--ink-2); }
+    .result.ok { background: var(--ok-bg); border-left-color: var(--green); }
+    .result.info { background: var(--info-bg); border-left-color: var(--sapphire); }
+    .result.error { background: var(--error-bg); border-left-color: var(--red); }
+    .result .title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-2); margin-bottom: 4px; }
+    .result .name { font-size: clamp(24px, 4vw, 34px); font-weight: 800; line-height: 1.15; }
+    .result .line { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .result .msg { margin-top: 6px; line-height: 1.4; }
+    .spinner {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 4px solid var(--line); border-top-color: var(--sapphire);
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .action-badge { display: inline-block; padding: 6px 14px; border-radius: 999px; color: #fff; font-weight: 800; font-size: 17px; }
+    .a-shift-in { background: var(--green); }
+    .a-break-out { background: var(--amber); }
+    .a-return-in { background: var(--sapphire); }
+    .a-shift-out { background: var(--red); }
+    .status { font-weight: 800; }
+    .status.late { color: var(--red-dark); }
+    .status.ontime { color: #2E7D32; }
+    .time { font-weight: 700; font-size: 20px; }
+
+    /* Manual entry */
+    .entry { display: flex; gap: 10px; flex-wrap: wrap; }
+    #idInput {
+      flex: 1 1 200px; min-width: 0; font: inherit; font-size: 24px; font-weight: 700; letter-spacing: 2px;
+      padding: 12px 14px; min-height: 58px; border: 2px solid var(--line); border-radius: 12px; outline: none;
+    }
+    #idInput:focus { border-color: var(--sapphire); box-shadow: 0 0 0 4px rgba(37,115,176,0.18); }
+    .btn {
+      font: inherit; font-size: 18px; font-weight: 700; border: 0; border-radius: 12px;
+      min-height: 58px; padding: 0 22px; cursor: pointer; touch-action: manipulation;
+    }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn.primary { background: var(--blue); color: #fff; }
+    .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+    /* Supervisor */
+    details.supervisor summary { cursor: pointer; font-weight: 700; color: var(--ink-2); font-size: 14px; }
+    .override-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
+    .override-grid .btn { min-height: 48px; font-size: 15px; color: #fff; }
+
+    /* Recent */
+    #recent { list-style: none; margin: 0; padding: 0; }
+    #recent li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); font-size: 15px; }
+    #recent li:first-child { border-top: 0; }
+    #recent .r-name { font-weight: 700; flex: 1 1 140px; }
+    #recent .r-time { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+    #recent .action-badge { font-size: 13px; padding: 3px 10px; }
+    .empty { color: var(--muted); font-size: 14px; }
+    .side { display: grid; gap: 16px; }
+
+    .setup-banner {
+      background: #FFF6E0; border-left: 5px solid var(--amber); border-radius: 12px;
+      padding: 12px 14px; font-size: 15px; grid-column: 1 / -1;
+    }
+    .setup-banner button { margin-left: 8px; }
+
+    /* Settings dialog */
+    dialog {
+      border: 0; border-radius: 16px; padding: 0; width: min(520px, calc(100vw - 32px));
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3); color: var(--ink);
+    }
+    dialog::backdrop { background: rgba(33,33,48,0.55); }
+    .dlg { padding: 20px; display: grid; gap: 12px; }
+    .dlg h2 { font-size: 20px; margin: 0; }
+    .dlg label { font-weight: 700; font-size: 14px; display: grid; gap: 6px; }
+    .dlg input, .dlg select {
+      font: inherit; font-size: 16px; font-weight: 400; padding: 10px 12px; min-height: 46px;
+      border: 1.5px solid var(--line); border-radius: 10px; width: 100%;
+    }
+    .dlg .row { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+    .dlg .btn { min-height: 46px; font-size: 16px; }
+    .btn.light { background: #fff; color: var(--ink); border: 1.5px solid var(--line); }
+    .dlg .note { font-size: 13px; color: var(--ink-2); margin: 0; line-height: 1.4; }
+    .dlg .status-line { font-size: 14px; min-height: 20px; }
+    .dlg .status-line.ok { color: #2E7D32; font-weight: 700; }
+    .dlg .status-line.bad { color: var(--red-dark); font-weight: 700; }
+
+    footer { text-align: center; color: var(--muted); font-size: 11px; padding: 6px 16px 14px; }
+    #fileReader { position: absolute; left: -10000px; top: 0; width: 300px; height: 300px; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="date" id="date">&nbsp;</div>
+      <div class="tz-note">Philippine time. The time saved with your record comes from the server, not this tablet.</div>
+    </div>
+    <button class="gear" id="gearBtn" type="button" aria-label="Kiosk settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+      </svg>
+    </button>
+  </header>
+  <div class="stroke"></div>
+
+  <main>
+    <div class="setup-banner" id="setupBanner" hidden>
+      This tablet isn't connected to the attendance sheet yet.
+      <button class="btn primary" id="setupBtn" type="button" style="min-height:40px;font-size:15px">Set up</button>
+    </div>
+
+    <section class="card cam-card">
+      <div class="cam-title">
+        <h1>Hold your ID badge up to the camera</h1>
+        <button class="switch" id="switchBtn" type="button" hidden>Switch camera</button>
+      </div>
+      <div class="viewer" id="viewer">
+        <div id="reader"></div>
+        <div class="placeholder" id="placeholder">Starting camera...</div>
+        <section id="resultCard" class="result" hidden aria-live="polite"></section>
+      </div>
+      <div class="diag" id="diag" hidden></div>
+      <div class="cam-hint" id="camHint">The camera scans by itself. Keep the QR code inside the box until you hear the beep.</div>
+    </section>
+
+    <div class="side">
+      <section class="card">
+        <h2>No badge? Type your ID #</h2>
+        <form id="scanForm" class="entry" autocomplete="off" novalidate>
+          <label for="idInput" hidden>ID #</label>
+          <input id="idInput" type="text" placeholder="ID #" inputmode="text"
+                 autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" maxlength="80">
+          <button type="submit" id="submitBtn" class="btn primary">Submit</button>
+        </form>
+      </section>
+
+      <section class="card" id="supervisorCard" hidden>
+        <details class="supervisor">
+          <summary>Supervisor</summary>
+          <div class="override-grid">
+            <button type="button" class="btn a-shift-in" data-action="Shift In">Shift In</button>
+            <button type="button" class="btn a-break-out" data-action="Break Out">Break Out</button>
+            <button type="button" class="btn a-return-in" data-action="Return In">Return In</button>
+            <button type="button" class="btn a-shift-out" data-action="Shift Out">Shift Out</button>
+          </div>
+          <p class="hint">Type the ID # above, then tap the action. Use only to correct an entry.</p>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>Recent on this tablet</h2>
+        <ul id="recent"><li class="empty">No scans yet.</li></ul>
+      </section>
+    </div>
+  </main>
+
+  <footer>For Internal Use Only</footer>
+
+  <dialog id="settings">
+    <form class="dlg" method="dialog" id="settingsForm">
+      <h2>Kiosk settings</h2>
+      <label>Web app link
+        <input id="cfgApi" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Kiosk passcode
+        <input id="cfgKey" type="password" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Camera
+        <select id="cfgFacing">
+          <option value="user">Front camera (faces the employee)</option>
+          <option value="environment">Back camera</option>
+        </select>
+      </label>
+      <p class="note">These are saved on this tablet only. Ask the attendance admin for the web app link and passcode.</p>
+      <div class="status-line" id="cfgStatus"></div>
+      <div class="row">
+        <button class="btn light" type="button" id="cfgClose">Close</button>
+        <button class="btn primary" type="button" id="cfgSave">Save and test</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="fileReader" aria-hidden="true"></div>
+
+  <script>
+    'use strict';
+
+    const TIMEZONE = 'Asia/Manila';
+    const DUPLICATE_WINDOW_MS = 5000;   // same badge read again within 5 s is ignored
+    const RESULT_HIDE_MS = 5000;        // result card auto-hide
+    const REQUEST_TIMEOUT_MS = 25000;
+
+    // ---------------------------------------------------------------
+    // Settings saved on this tablet (never in the page source)
+    // ---------------------------------------------------------------
+    function store(key, value) {
+      try {
+        if (value === undefined) return localStorage.getItem(key) || '';
+        localStorage.setItem(key, value);
+      } catch (e) { /* storage blocked: settings last for this visit only */ }
+      return value;
+    }
+    const cfg = {
+      api: store('att.api'),
+      key: store('att.key'),
+      facing: store('att.facing') || 'user'
+    };
+
+    const el = {
+      clock: document.getElementById('clock'),
+      date: document.getElementById('date'),
+      viewer: document.getElementById('viewer'),
+      placeholder: document.getElementById('placeholder'),
+      diag: document.getElementById('diag'),
+      camHint: document.getElementById('camHint'),
+      switchBtn: document.getElementById('switchBtn'),
+      result: document.getElementById('resultCard'),
+      form: document.getElementById('scanForm'),
+      input: document.getElementById('idInput'),
+      submitBtn: document.getElementById('submitBtn'),
+      recent: document.getElementById('recent'),
+      supervisorCard: document.getElementById('supervisorCard'),
+      setupBanner: document.getElementById('setupBanner'),
+      setupBtn: document.getElementById('setupBtn'),
+      gearBtn: document.getElementById('gearBtn'),
+      dialog: document.getElementById('settings'),
+      cfgApi: document.getElementById('cfgApi'),
+      cfgKey: document.getElementById('cfgKey'),
+      cfgFacing: document.getElementById('cfgFacing'),
+      cfgStatus: document.getElementById('cfgStatus'),
+      cfgSave: document.getElementById('cfgSave'),
+      cfgClose: document.getElementById('cfgClose')
+    };
+
+    // Shared ID parser (same rules as the server).
+    function parseId(text) {
+      return String(text == null ? '' : text).replace(/^\s*EMP:/i, '').replace(/\s+/g, '');
+    }
+
+    function make(tag, cls, text) {
+      const node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text != null) node.textContent = text;
+      return node;
+    }
+
+    // ---------------------------------------------------------------
+    // Clock
+    // ---------------------------------------------------------------
+    const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+    const dateFmt = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    function tick() {
+      const now = new Date();
+      el.clock.textContent = timeFmt.format(now);
+      el.date.textContent = dateFmt.format(now);
+    }
+    tick();
+    setInterval(tick, 1000);
+
+    // ---------------------------------------------------------------
+    // Sound, vibration, keep screen on
+    // ---------------------------------------------------------------
+    let audioCtx = null;
+    function unlockAudio() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+      } catch (e) { /* no audio */ }
+    }
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function (evt) {
+      document.addEventListener(evt, unlockAudio, { passive: true });
+    });
+    function tone(freq, duration, type, volume, delay) {
+      try {
+        unlockAudio();
+        if (!audioCtx) return;
+        const t = audioCtx.currentTime + (delay || 0);
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(volume, t + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + duration + 0.05);
+      } catch (e) { /* ignore */ }
+    }
+    function vibrate(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) { /* ignore */ } }
+    function soundRead() { tone(1046, 0.08, 'sine', 0.15, 0); }
+    function soundSuccess() { tone(880, 0.12, 'sine', 0.3, 0); tone(1320, 0.14, 'sine', 0.25, 0.13); vibrate(100); }
+    function soundInfo() { tone(523, 0.22, 'sine', 0.09, 0); }
+    function soundError() { tone(220, 0.18, 'square', 0.12, 0); tone(165, 0.3, 'square', 0.12, 0.2); vibrate([80, 60, 80]); }
+
+    let wakeLock = null;
+    async function keepAwake() {
+      try {
+        if ('wakeLock' in navigator && (!wakeLock || wakeLock.released)) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (e) { /* not supported or not allowed */ }
+    }
+
+    // ---------------------------------------------------------------
+    // Server calls (Apps Script web app doPost)
+    // ---------------------------------------------------------------
+    async function callApi(payload, override) {
+      const api = override ? override.api : cfg.api;
+      const key = override ? override.key : cfg.key;
+      if (!api || !key) throw new Error('This tablet is not set up yet. Tap the gear icon to add the web app link and passcode.');
+      const controller = new AbortController();
+      const timer = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
+      try {
+        const res = await fetch(api, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },  // simple request: no CORS preflight
+          body: JSON.stringify(Object.assign({ key: key }, payload)),
+          redirect: 'follow',
+          signal: controller.signal
+        });
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          throw new Error('Google sent an unexpected reply. Check the web app link, and that the deployment access is "Anyone".');
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') throw new Error('The server took too long to answer. Please scan again.');
+        if (e instanceof TypeError) throw new Error('Can\'t reach the attendance server. Check the Wi-Fi, the web app link, and that the deployment access is "Anyone".');
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Submitting a scan
+    // ---------------------------------------------------------------
+    let busy = false;
+    let lastCode = { id: '', t: 0 };
+    let hideTimer = null;
+    const recent = [];
+
+    function setBusy(state) {
+      busy = state;
+      el.input.disabled = state;
+      el.submitBtn.disabled = state;
+      document.querySelectorAll('.override-grid .btn').forEach(function (b) { b.disabled = state; });
+    }
+
+    async function submitId(raw, overrideAction, fromCamera) {
+      if (busy) return;
+      const id = parseId(raw);
+      if (!id) {
+        showResult({ result: 'error', message: 'Please scan or enter an ID #.' });
+        soundError();
+        return;
+      }
+      const now = Date.now();
+      if (!overrideAction && id === lastCode.id && now - lastCode.t < DUPLICATE_WINDOW_MS) return;
+      lastCode = { id: id, t: now };
+
+      if (fromCamera) soundRead();
+      setBusy(true);
+      showLoading();
+      let res;
+      try {
+        res = await callApi({ action: 'record', id: id, overrideAction: overrideAction || null });
+      } catch (e) {
+        res = { result: 'error', message: e.message || String(e) };
+      }
+      setBusy(false);
+      el.input.value = '';
+      handleResult(res);
+    }
+
+    function handleResult(res) {
+      if (!res || typeof res !== 'object') res = { result: 'error', message: 'Unexpected response from the server.' };
+      if (res.result === 'logged') {
+        soundSuccess();
+        recent.unshift({ name: res.name, action: res.action, time: res.time, status: res.status });
+        if (recent.length > 5) recent.length = 5;
+        renderRecent();
+      } else if (res.result === 'already_recorded') {
+        soundInfo();
+      } else {
+        soundError();
+        lastCode = { id: '', t: 0 }; // allow an immediate retry after an error
+      }
+      showResult(res);
+    }
+
+    el.form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      submitId(el.input.value, null, false);
+      el.input.blur(); // close the on-screen keyboard so the camera is visible again
+    });
+
+    // ---------------------------------------------------------------
+    // Result card (shown over the camera)
+    // ---------------------------------------------------------------
+    function actionClass(action) {
+      return { 'Shift In': 'a-shift-in', 'Break Out': 'a-break-out', 'Return In': 'a-return-in', 'Shift Out': 'a-shift-out' }[action] || 'a-return-in';
+    }
+    function showLoading() {
+      clearTimeout(hideTimer);
+      el.result.hidden = false;
+      el.result.className = 'result loading';
+      el.result.replaceChildren(make('div', 'spinner'), make('div', '', 'Recording...'));
+    }
+    function showResult(res) {
+      clearTimeout(hideTimer);
+      el.result.hidden = false;
+      const kind = res.result === 'logged' ? 'ok' : res.result === 'already_recorded' ? 'info' : 'error';
+      el.result.className = 'result ' + kind;
+      const parts = [];
+      if (kind === 'ok') {
+        parts.push(make('div', 'title', 'Success'));
+        parts.push(make('div', 'name', res.name));
+        const line = make('div', 'line');
+        line.appendChild(make('span', 'action-badge ' + actionClass(res.action), res.action));
+        line.appendChild(make('span', 'time', 'at ' + res.time));
+        if (res.status) line.appendChild(make('span', 'status ' + (res.status === 'Late' ? 'late' : 'ontime'), res.status));
+        parts.push(line);
+        if (res.shift) parts.push(make('div', 'msg', 'Shift: ' + res.shift));
+      } else if (kind === 'info') {
+        parts.push(make('div', 'title', 'Already recorded'));
+        parts.push(make('div', 'msg', res.message));
+      } else {
+        parts.push(make('div', 'title', 'Not recorded'));
+        parts.push(make('div', 'msg', res.message || 'Something went wrong. Please try again.'));
+      }
+      el.result.replaceChildren.apply(el.result, parts);
+      hideTimer = setTimeout(function () { el.result.hidden = true; }, kind === 'error' ? RESULT_HIDE_MS + 3000 : RESULT_HIDE_MS);
+    }
+
+    function renderRecent() {
+      if (!recent.length) {
+        el.recent.replaceChildren(make('li', 'empty', 'No scans yet.'));
+        return;
+      }
+      el.recent.replaceChildren.apply(el.recent, recent.map(function (r) {
+        const li = make('li');
+        li.appendChild(make('span', 'r-name', r.name));
+        li.appendChild(make('span', 'action-badge ' + actionClass(r.action), r.action));
+        li.appendChild(make('span', 'r-time', r.time));
+        if (r.status) li.appendChild(make('span', 'status ' + (r.status === 'Late' ? 'late' : 'ontime'), r.status));
+        return li;
+      }));
+    }
+
+    // ---------------------------------------------------------------
+    // Always-on camera
+    // ---------------------------------------------------------------
+    let scanner = null;
+    let running = false;
+    let starting = false;
+    let cameras = [];
+    let cameraIndex = -1;
+
+    const scanConfig = {
+      fps: 10,
+      qrbox: function (w, h) {
+        const size = Math.floor(Math.min(w, h) * 0.65);
+        return { width: Math.max(size, 160), height: Math.max(size, 160) };
+      }
+    };
+
+    function onDecoded(text) {
+      if (busy || el.dialog.open) return; // ignore scans while settings are open
+      submitId(text, null, true);
+    }
+
+    async function startCamera(source) {
+      if (running || starting) return;
+      if (typeof Html5Qrcode === 'undefined') {
+        showCameraFailure({ name: 'LibraryError' });
+        return;
+      }
+      starting = true;
+      el.diag.hidden = true;
+      el.placeholder.hidden = false;
+      el.placeholder.textContent = 'Starting camera...';
+      if (!scanner) scanner = new Html5Qrcode('reader', { verbose: false });
+      const target = source || { facingMode: cfg.facing };
+      try {
+        await scanner.start(target, scanConfig, onDecoded, function () { /* no code in this frame */ });
+        running = true;
+        el.placeholder.hidden = true;
+        const label = source && cameras[cameraIndex] ? cameras[cameraIndex].label || '' : '';
+        const front = source ? /front|user|facing front/i.test(label) : cfg.facing === 'user';
+        el.viewer.classList.toggle('mirror', front);
+        loadCameraList();
+      } catch (err) {
+        running = false;
+        showCameraFailure(err);
+      } finally {
+        starting = false;
+      }
+    }
+
+    async function stopCamera() {
+      if (scanner && running) {
+        try { await scanner.stop(); } catch (e) { /* ignore */ }
+      }
+      running = false;
+    }
+
+    async function loadCameraList() {
+      if (cameras.length) return;
+      try { cameras = await Html5Qrcode.getCameras(); } catch (e) { cameras = []; }
+      if (cameras.length > 1) {
+        const wantFront = cfg.facing === 'user';
+        const idx = cameras.findIndex(function (c) {
+          return wantFront ? /front|user/i.test(c.label || '') : /back|rear|environment/i.test(c.label || '');
+        });
+        cameraIndex = idx >= 0 ? idx : 0;
+        el.switchBtn.hidden = false;
+      }
+    }
+
+    el.switchBtn.addEventListener('click', async function () {
+      if (cameras.length < 2) return;
+      el.switchBtn.disabled = true;
+      cameraIndex = (cameraIndex + 1) % cameras.length;
+      await stopCamera();
+      await startCamera(cameras[cameraIndex].id);
+      el.switchBtn.disabled = false;
+    });
+
+    // Release the camera when the tablet sleeps or the tab is hidden; resume when back.
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') {
+        keepAwake();
+        startCamera(cameraIndex >= 0 && cameras[cameraIndex] ? cameras[cameraIndex].id : null);
+      } else {
+        stopCamera();
+      }
+    });
+
+    // ---------------------------------------------------------------
+    // Camera check diagnostics
+    // ---------------------------------------------------------------
+    const HINTS = {
+      NotAllowedError: 'Camera permission was denied. Allow the camera for this site in the browser settings, then reload.',
+      PermissionDeniedError: 'Camera permission was denied. Allow the camera for this site in the browser settings, then reload.',
+      NotFoundError: 'No camera was found on this tablet.',
+      DevicesNotFoundError: 'No camera was found on this tablet.',
+      NotReadableError: 'The camera is busy in another app or tab. Close it and reload.',
+      TrackStartError: 'The camera is busy in another app or tab. Close it and reload.',
+      OverconstrainedError: 'The chosen camera is not available. Pick the other camera in settings.',
+      SecurityError: 'The browser blocked the camera. Open this page directly over https, not inside another app.',
+      AbortError: 'The camera stopped unexpectedly. Reload the page.',
+      NotSupportedError: 'This browser does not support camera scanning. Use Chrome.',
+      LibraryError: 'The scanner could not load. Check the internet connection and reload.'
+    };
+    function errorName(err) {
+      if (!err) return 'UnknownError';
+      if (typeof err === 'object' && err.name && err.name !== 'Error') return err.name;
+      const m = /([A-Za-z]+Error)/.exec(typeof err === 'string' ? err : String(err.message || err));
+      return m ? m[1] : 'UnknownError';
+    }
+    async function cameraCheck() {
+      let policy = 'unknown';
+      try {
+        if (document.permissionsPolicy && document.permissionsPolicy.allowsFeature) {
+          policy = document.permissionsPolicy.allowsFeature('camera') ? 'allowed' : 'blocked';
+        } else if (document.featurePolicy && document.featurePolicy.allowsFeature) {
+          policy = document.featurePolicy.allowsFeature('camera') ? 'allowed' : 'blocked';
+        }
+      } catch (e) { policy = 'unknown'; }
+      let permission = 'unknown';
+      try {
+        if (navigator.permissions && navigator.permissions.query) permission = (await navigator.permissions.query({ name: 'camera' })).state;
+      } catch (e) { permission = 'unknown'; }
+      let framed = 'unknown';
+      try { framed = window.self !== window.top ? 'yes' : 'no'; } catch (e) { framed = 'yes'; }
+      return 'Camera check: policy=' + policy + ' · permission=' + permission + ' · framed=' + framed +
+        ' · secure=' + (window.isSecureContext ? 'yes' : 'no') +
+        ' · mediaDevices=' + (navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? 'yes' : 'no');
+    }
+    async function showCameraFailure(err) {
+      const name = errorName(err);
+      el.placeholder.hidden = false;
+      el.placeholder.textContent = 'Camera not available. Type your ID # instead.';
+      const title = make('b', '', name + ': ' + (HINTS[name] || 'The camera could not start.'));
+      const code = make('code', '', await cameraCheck());
+      el.diag.replaceChildren(title, code);
+      el.diag.hidden = false;
+    }
+
+    // ---------------------------------------------------------------
+    // Settings
+    // ---------------------------------------------------------------
+    const API_PATTERN = /^https:\/\/script\.google\.com\/(a\/macros\/[^/]+\/|macros\/)s\/[A-Za-z0-9_-]+\/exec$/;
+
+    function openSettings() {
+      el.cfgApi.value = cfg.api;
+      el.cfgKey.value = cfg.key;
+      el.cfgFacing.value = cfg.facing;
+      el.cfgStatus.textContent = '';
+      el.cfgStatus.className = 'status-line';
+      if (el.dialog.showModal) el.dialog.showModal(); else el.dialog.setAttribute('open', '');
+    }
+    function closeSettings() {
+      if (el.dialog.close) el.dialog.close(); else el.dialog.removeAttribute('open');
+    }
+    el.gearBtn.addEventListener('click', openSettings);
+    el.setupBtn.addEventListener('click', openSettings);
+    el.cfgClose.addEventListener('click', closeSettings);
+
+    el.cfgSave.addEventListener('click', async function () {
+      const api = el.cfgApi.value.trim();
+      const key = el.cfgKey.value;
+      const facing = el.cfgFacing.value;
+      el.cfgStatus.className = 'status-line';
+      if (!API_PATTERN.test(api)) {
+        el.cfgStatus.className = 'status-line bad';
+        el.cfgStatus.textContent = 'The link should look like https://script.google.com/macros/s/.../exec';
+        return;
+      }
+      if (!key) {
+        el.cfgStatus.className = 'status-line bad';
+        el.cfgStatus.textContent = 'Enter the kiosk passcode.';
+        return;
+      }
+      el.cfgSave.disabled = true;
+      el.cfgStatus.textContent = 'Testing the connection...';
+      let res;
+      try {
+        res = await callApi({ action: 'ping' }, { api: api, key: key });
+      } catch (e) {
+        res = { result: 'error', message: e.message || String(e) };
+      }
+      el.cfgSave.disabled = false;
+      if (res && res.result === 'ok') {
+        const facingChanged = facing !== cfg.facing;
+        cfg.api = store('att.api', api);
+        cfg.key = store('att.key', key);
+        cfg.facing = store('att.facing', facing);
+        el.cfgStatus.className = 'status-line ok';
+        el.cfgStatus.textContent = 'Connected. Server time: ' + res.serverTime + '.';
+        applyServerOptions(res);
+        el.setupBanner.hidden = true;
+        if (facingChanged) {
+          cameras = [];
+          cameraIndex = -1;
+          el.switchBtn.hidden = true;
+          await stopCamera();
+          startCamera(null);
+        }
+        setTimeout(closeSettings, 1200);
+      } else {
+        el.cfgStatus.className = 'status-line bad';
+        el.cfgStatus.textContent = (res && res.message) || 'Could not connect.';
+      }
+    });
+
+    function applyServerOptions(res) {
+      el.supervisorCard.hidden = !res.allowOverride;
+    }
+
+    document.querySelectorAll('.override-grid .btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const id = parseId(el.input.value);
+        if (!id) {
+          showResult({ result: 'error', message: 'Type the ID # first, then tap the action.' });
+          return;
+        }
+        submitId(id, btn.getAttribute('data-action'), false);
+      });
+    });
+
+    // ---------------------------------------------------------------
+    // Start
+    // ---------------------------------------------------------------
+    (async function init() {
+      keepAwake();
+      startCamera(null);
+      if (!cfg.api || !cfg.key) {
+        el.setupBanner.hidden = false;
+        return;
+      }
+      try {
+        const res = await callApi({ action: 'ping' });
+        if (res && res.result === 'ok') applyServerOptions(res);
+        else if (res) showResult(res);
+      } catch (e) {
+        showResult({ result: 'error', message: e.message || String(e) });
+      }
+    })();
+  </script>
+</body>
+</html>
