@@ -2,8 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <script>
+    // Theme: follows the device's dark-mode setting until someone taps the moon/sun button.
+    (function () {
+      var pref = '';
+      try { pref = localStorage.getItem('att.theme') || ''; } catch (e) { pref = ''; }
+      var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+      function apply() {
+        var dark = pref ? pref === 'dark' : !!(mq && mq.matches);
+        document.documentElement.classList.toggle('dark', dark);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', dark ? '#0B0B18' : '#DCE6FF');
+      }
+      apply();
+      if (mq && mq.addEventListener) mq.addEventListener('change', function () { if (!pref) apply(); });
+      document.addEventListener('DOMContentLoaded', apply);
+      window.toggleTheme = function () {
+        pref = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
+        try { localStorage.setItem('att.theme', pref); } catch (e) { /* not saved */ }
+        apply();
+      };
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#DCE6FF">
   <title>QR Scanner</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap" rel="stylesheet">
@@ -249,6 +272,67 @@
       border: 1px solid var(--glass-edge); border-radius: 22px; box-shadow: var(--lift);
     }
     #fileReader { position: absolute; left: -10000px; top: 0; width: 300px; height: 300px; }
+
+
+    /* ===== Dark mode (html.dark is set by the theme script in <head>) ===== */
+    .icon-sun { display: none; }
+    html.dark .icon-sun { display: block; }
+    html.dark .icon-moon { display: none; }
+
+    html.dark {
+      color-scheme: dark;
+      --label: #F2F2F7;
+      --label-2: rgba(235, 235, 245, 0.72);
+      --label-3: rgba(235, 235, 245, 0.46);
+      --blue: #0A84FF;
+      --green: #30D158;
+      --orange: #FF9F0A;
+      --red: #FF453A;
+      --purple: #BF5AF2;
+      --pink: #FF375F;
+      --glass: rgba(28, 28, 40, 0.52);
+      --glass-strong: rgba(48, 48, 64, 0.62);
+      --glass-edge: rgba(255, 255, 255, 0.14);
+      --hairline: rgba(255, 255, 255, 0.16);
+      --lift: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 14px 36px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+      --lift-sm: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 6px 16px rgba(0, 0, 0, 0.4);
+    }
+    html.dark body {
+      background-color: #0B0B18;
+      background-image:
+        radial-gradient(60% 50% at 12% 10%, rgba(37, 99, 235, 0.55) 0%, rgba(37, 99, 235, 0) 70%),
+        radial-gradient(55% 45% at 92% 12%, rgba(124, 58, 237, 0.55) 0%, rgba(124, 58, 237, 0) 70%),
+        radial-gradient(60% 55% at 88% 92%, rgba(219, 39, 119, 0.45) 0%, rgba(219, 39, 119, 0) 70%),
+        radial-gradient(55% 50% at 8% 92%, rgba(234, 88, 12, 0.35) 0%, rgba(234, 88, 12, 0) 70%),
+        linear-gradient(160deg, #0B1022 0%, #140E2A 50%, #1C0B1A 100%);
+    }
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      html.dark { --glass: rgba(28, 28, 40, 0.9); --glass-strong: rgba(48, 48, 64, 0.95); }
+    }
+    html.dark .clock { background: linear-gradient(180deg, #FFFFFF 0%, #C9CBFF 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    html.dark .btn.dark { background: #F2F2F7; color: #1C1C1E; }
+    html.dark .field input { color: var(--label); }
+    html.dark .notice, html.dark .diag { background: rgba(255, 214, 10, 0.16); border-color: var(--glass-edge); }
+    html.dark .result.ok { background: linear-gradient(135deg, rgba(48, 209, 88, 0.3), rgba(40, 40, 56, 0.75)); }
+    html.dark .result.info { background: linear-gradient(135deg, rgba(10, 132, 255, 0.3), rgba(40, 40, 56, 0.75)); }
+    html.dark .result.error { background: linear-gradient(135deg, rgba(255, 69, 58, 0.3), rgba(40, 40, 56, 0.75)); }
+    html.dark .status.late { background: rgba(255, 69, 58, 0.22); color: #FF8A80; }
+    html.dark .status.ontime { background: rgba(48, 209, 88, 0.22); color: #6EE7A0; }
+
+    /* Kiosk: solid result over the camera, settings sheet */
+    html.dark .viewer { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 18px 40px rgba(0, 0, 0, 0.5); }
+    html.dark .viewer .result { background: #23232F; }
+    html.dark .viewer .result.ok { background: linear-gradient(135deg, #14442A 0%, #23232F 100%); }
+    html.dark .viewer .result.info { background: linear-gradient(135deg, #0E3A6B 0%, #23232F 100%); }
+    html.dark .viewer .result.error { background: linear-gradient(135deg, #5A1A17 0%, #23232F 100%); }
+    html.dark dialog { background: rgba(30, 30, 42, 0.88); }
+    html.dark dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+    html.dark .dlg input, html.dark .dlg select { background: rgba(255, 255, 255, 0.08); color: var(--label); }
+    html.dark .dlg .status-line.ok { color: #30D158; }
+    html.dark .dlg .status-line.bad { color: #FF6961; }
+
+    /* Scanner */
+    html.dark .sent { background: linear-gradient(135deg, rgba(48, 209, 88, 0.3), rgba(40, 40, 56, 0.75)); }
   </style>
 </head>
 <body>
